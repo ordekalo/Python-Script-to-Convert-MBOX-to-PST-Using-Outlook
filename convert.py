@@ -3,6 +3,7 @@ import mailbox
 import os
 import email
 import win32com.client
+from tqdm import tqdm  # Import the tqdm progress bar
 
 def extract_emails_from_mbox(mbox_file):
     """
@@ -39,7 +40,8 @@ def import_emails_to_outlook(emails, pst_file):
     if inbox_folder is None:
         inbox_folder = pst_folder.Folders.Add("Inbox")
 
-    for raw_email in emails:
+    # Use tqdm progress bar for processing emails
+    for raw_email in tqdm(emails, desc="Importing emails to Outlook", unit="email"):
         msg = email.message_from_string(raw_email)
 
         # Create a new mail item in Outlook
