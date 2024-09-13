@@ -1,6 +1,6 @@
 # MBOX to PST Converter Using Outlook COM Interface
 
-This Python script allows you to convert MBOX files to PST format by using the Microsoft Outlook COM interface. It reads an MBOX file, extracts the emails, and imports them into a new PST file.
+This Python script allows you to convert MBOX files to PST format by using the Microsoft Outlook COM interface. It reads an MBOX file, extracts the emails, and imports them into a new PST file, with a progress bar showing the conversion progress.
 
 ## Features
 
@@ -8,6 +8,7 @@ This Python script allows you to convert MBOX files to PST format by using the M
 - Utilizes the Microsoft Outlook COM interface to perform the conversion.
 - Automatically creates an "Inbox" folder in the PST file if it doesn't exist.
 - Handles both plain text and HTML email bodies.
+- Displays a progress bar during conversion using `tqdm`.
 
 ## Requirements
 
@@ -15,6 +16,7 @@ This Python script allows you to convert MBOX files to PST format by using the M
 - **Microsoft Outlook**: You must have Outlook installed and configured on your machine.
 - **Python 3.x**
 - **pywin32** package: This is required for interacting with Outlook.
+- **tqdm** package: This package is used to display the progress bar.
 
 ## Installation
 
@@ -22,9 +24,9 @@ This Python script allows you to convert MBOX files to PST format by using the M
 
 Make sure you have Python 3.x installed on your system. If not, you can download it from [Python's official website](https://www.python.org/downloads/).
 
-### 2. Install the `pywin32` package
+### 2. Install the required packages
 
-To interact with Outlook, you'll need the `pywin32` package, which provides access to the COM interface. You can install it via pip:
+To interact with Outlook and display the progress bar, you'll need the following packages:
 
 ```bash
-pip install pywin32
+pip install -r requirements.txt
