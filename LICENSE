@@ -19,3 +19,15 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+### Key Sections of the README:
+1. **Project Overview**: Provides a clear introduction to what the script does.
+2. **Requirements**: Lists the dependencies and necessary components (Windows, Outlook, Python, `pywin32`).
+3. **Installation**: Steps to install Python and the necessary libraries.
+4. **Usage Instructions**: Explains how to run the script with an MBOX file and what the output will be.
+5. **Example**: An example showing how to run the script with an MBOX file path.
+6. **Code Overview**: A high-level explanation of how the code works.
+7. **Troubleshooting**: Common issues and fixes.
+8. **License**: MIT License information.
+
+This `README.md` file should provide all necessary details for anyone who wants to use or contribute to your project! Let me know if you'd like to add or modify anything!
