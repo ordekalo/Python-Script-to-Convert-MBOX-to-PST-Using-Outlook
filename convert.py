@@ -9,10 +9,13 @@ def extract_emails_from_mbox(mbox_file):
     """
     Extract emails from an MBOX file and return them as a list of raw email strings.
     """
+    print(f"Opening MBOX file: {mbox_file}")
     mbox = mailbox.mbox(mbox_file)
     emails = []
+    print(f"Extracting emails from {mbox_file}...")
     for message in mbox:
         emails.append(message.as_string())
+    print(f"Extracted {len(emails)} emails from the MBOX file.")
     return emails
 
 def get_folder_by_name(parent_folder, folder_name):
@@ -28,20 +31,26 @@ def import_emails_to_outlook(emails, pst_file):
     """
     Import a list of emails into a new PST file in Outlook.
     """
+    print(f"Starting Outlook...")
     outlook = win32com.client.Dispatch("Outlook.Application")
     namespace = outlook.GetNamespace("MAPI")
 
     # Add a new PST file to Outlook
+    print(f"Creating PST file: {pst_file}")
     namespace.AddStoreEx(pst_file, 3)  # 3 = Unicode PST format
     pst_folder = namespace.Folders.GetLast()
 
     # Create "Inbox" folder if it doesn't exist
     inbox_folder = get_folder_by_name(pst_folder, "Inbox")
     if inbox_folder is None:
+        print("Creating 'Inbox' folder in the PST file...")
         inbox_folder = pst_folder.Folders.Add("Inbox")
+    else:
+        print("'Inbox' folder already exists in the PST file.")
 
+    print(f"Importing emails to the 'Inbox' folder in the PST file...")
     # Use tqdm progress bar for processing emails
-    for raw_email in tqdm(emails, desc="Importing emails to Outlook", unit="email"):
+    for raw_email in tqdm(emails, desc="Importing emails", unit="email"):
         msg = email.message_from_string(raw_email)
 
         # Create a new mail item in Outlook
@@ -69,6 +78,8 @@ def import_emails_to_outlook(emails, pst_file):
         # Save the mail item in the "Inbox" folder
         mail_item.Save()
         mail_item.Move(inbox_folder)
+
+    print(f"Finished importing emails into the PST file: {pst_file}")
 
 if __name__ == "__main__":
     # Ensure the correct number of arguments are provided
