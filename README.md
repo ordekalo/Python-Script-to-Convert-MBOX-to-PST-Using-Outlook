@@ -1,171 +1,88 @@
 
-# MBOX to PST Converter Using Outlook
+# MBOX to PST Converter
 
-This Python script converts MBOX files into PST format using the Microsoft Outlook COM interface. It supports processing large MBOX files efficiently, including attachments, retry logic, and batch processing to avoid memory overload. The script is designed to be robust, with detailed error logging, progress tracking, and directory management to ensure smooth operation.
+This Python script converts emails from an MBOX file to a PST file using Microsoft Outlook on Windows. It is designed to efficiently handle large MBOX files, preserve email attachments, and provides robust error handling and progress tracking.
 
 ## Features
 
-- **MBOX to PST Conversion**: Converts emails from an MBOX file to a PST file.
-- **Attachment Handling**: Directly adds email attachments without saving them to disk.
-- **Retry Logic**: Automatically retries email processing in case of errors, ensuring robustness.
-- **Batch Processing**: Emails are processed in batches to avoid memory overload and improve performance.
-- **Graceful Error Handling**: Logs all errors and skips already processed emails using unique email hashing.
-- **Directory Management**: Automatically creates directories for PST files if they don't exist.
-- **Progress Logging**: Detailed logging of processing steps, including success and error information.
+- **Batch Processing**: Processes emails in configurable batches to avoid memory overload.
+- **Attachment Handling**: In-memory processing of attachments to minimize disk I/O.
+- **Graceful Exit**: Supports signal handling (e.g., Ctrl+C) to gracefully shut down and save progress.
+- **Checkpointing**: Save and resume progress after interruptions.
+- **Auto-detect MBOX Files**: If no MBOX file is specified, the script will auto-detect `.mbox` files in the current directory.
+- **Backup PST Files**: Automatically backs up existing PST files to avoid overwriting.
+- **Multi-threading**: Email processing is parallelized for improved performance.
+- **Configurable Workers**: Set the number of workers to control parallelization based on system resources.
+- **Interactive Prompts**: Prevent accidental overwriting by confirming before replacing existing PST files.
+- **Summary Report**: A detailed report is generated at the end, summarizing the number of emails processed and any failures.
+- **Progress Bars**: Real-time progress bars are provided for email extraction and processing.
 
-## Requirements
+## Prerequisites
 
-- **Operating System**: Windows
-- **Microsoft Outlook**: You must have Outlook installed and configured on your system.
-- **Python 3.x**: The script requires Python 3.x.
+- **Microsoft Outlook**: Ensure Outlook is installed and configured on your Windows machine.
+- **Python 3.x**: Install Python on your system.
 
-## Installation
+### Required Python Packages
 
-### 1. Clone or Download the Repository
+- `pywin32`: For interacting with Microsoft Outlook.
+- `tqdm`: For displaying progress bars.
+- `retrying`: For handling retryable errors with exponential backoff.
 
-Clone the repository using Git or download it as a ZIP and extract it to your local machine:
-
-```bash
-git clone https://github.com/ordekalo/Python-Script-to-Convert-MBOX-to-PST-Using-Outlook.git
-```
-
-### 2. Install Python Dependencies
-
-Make sure you have Python 3.x installed. Install the required Python packages using `pip` and the provided `requirements.txt` file:
+You can install the required packages using:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Required Dependencies
-
-You can install the dependencies manually if necessary:
-
-```bash
-pip install tqdm pywin32 timeout-decorator
-```
-
-These packages are required for:
-- **`tqdm`**: Displaying progress bars for long-running operations.
-- **`pywin32`**: Interfacing with Microsoft Outlook using the Windows COM API.
-- **`timeout-decorator`**: Adding timeout capabilities to specific operations.
-
 ## Usage
 
-### Command-Line Usage
-
-You can run the script by providing the path to the MBOX file, the output folder for attachments, and an optional path for the PST file. If no PST file path is provided, it defaults to `emails.pst` in the current working directory.
-
 ```bash
-python convert.py <mbox_file> <output_folder> --pst_file <pst_file_path>
+python convert.py [output_folder] [--mbox_file <path_to_mbox>] [--pst_file <path_to_pst>] [--log-level <log_level>] [--batch-size <batch_size>] [--workers <num_workers>]
 ```
 
-### Arguments:
+### Arguments
 
-1. **`mbox_file`**: The path to the MBOX file that contains the emails you want to convert to PST.
-2. **`output_folder`**: The directory where attachments will be temporarily saved (if needed).
-3. **`--pst_file`**: (Optional) The path where the PST file will be saved. If not provided, it defaults to `emails.pst`.
+- `output_folder` (required): Directory where attachments will be saved.
+- `--mbox_file`: Path to the MBOX file. If not provided, the script will auto-detect `.mbox` files in the current directory.
+- `--pst_file`: Path to save the PST file. Default is `emails.pst` in the current directory.
+- `--log-level`: Set the log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). Default is `INFO`.
+- `--batch-size`: Number of emails to process in a batch. Default is 500.
+- `--workers`: Number of parallel workers for processing emails. Default is the number of CPU cores.
 
-### Example Command:
+### Examples
 
-```bash
-python convert.py file.mbox D:\output --pst_file D:\output\emails.pst
-```
+1. **Basic Usage**:
+   ```bash
+   python convert.py D:\output --pst_file D:\output\emails.pst
+   ```
 
-In this example:
-- `file.mbox` is the MBOX file to be converted.
-- `D:\output` is the folder where attachments (if any) will be saved temporarily.
-- `D:\output\emails.pst` is the PST file that will be generated.
+2. **With a Specific MBOX File**:
+   ```bash
+   python convert.py D:\output --mbox_file D:\mails\file.mbox --pst_file D:\output\emails.pst
+   ```
 
-## Detailed Logging
+3. **Verbose Logging (Debug Mode)**:
+   ```bash
+   python convert.py D:\output --log-level DEBUG
+   ```
 
-The script logs all progress and errors to a file called `import_log.txt`. You can monitor this file to track the progress of the conversion and check for any issues.
+4. **Configuring Batch Size and Workers**:
+   ```bash
+   python convert.py D:\output --batch-size 1000 --workers 8
+   ```
 
-### Logging Information Includes:
-- The number of emails processed.
-- The creation of the PST file and its directory.
-- Any errors encountered during the process (e.g., email processing errors, directory creation errors).
-- Retry attempts if processing an email fails.
+### Progress and Checkpointing
 
-### Log Location
+The script displays progress bars for email extraction and batch processing. It also saves progress after every batch, allowing you to resume the process if interrupted (e.g., system shutdown or Ctrl+C).
 
-The log file is created in the same directory as the script:
-```text
-import_log.txt
-```
+### Backup of Existing PST Files
 
-## Features in Detail
+Before overwriting an existing PST file, the script creates a backup in the same directory (e.g., `emails.pst.backup`).
 
-### 1. **Error Handling and Retry Logic**:
-   - If an email fails to be processed (due to a temporary error), the script retries the operation up to 3 times. If the operation fails after 3 retries, the email is skipped, and an error is logged.
+### Graceful Exit
 
-### 2. **Attachment Handling**:
-   - Attachments are saved directly to the Outlook mail item without being written to disk first. This optimizes performance and prevents cluttering the file system.
-
-### 3. **Batch Processing**:
-   - The script processes emails in batches of 500 (configurable) to avoid memory overload when dealing with large MBOX files. Each batch of emails is processed concurrently using Python’s `concurrent.futures` library.
-
-### 4. **Graceful Shutdown & Resuming**:
-   - The script uses a unique hash to identify each email. If the script is interrupted or fails, it will skip emails that have already been processed when restarted.
-
-### 5. **Directory Creation**:
-   - If the provided path for the PST file doesn’t exist, the script automatically creates the necessary directories.
-
-### 6. **Progress Tracking**:
-   - The `tqdm` library is used to display a progress bar while processing emails, showing how many emails have been processed and how many are left.
-
-## Customization
-
-### 1. **Batch Size**:
-   - You can change the `batch_size` parameter inside the script if you want to process a different number of emails per batch (default is 500).
-
-### 2. **Retry Count**:
-   - The default number of retries for a failed email processing attempt is 3. You can modify this value by changing the `retries` parameter in the `process_email_with_retry()` function.
-
-### 3. **PST File Location**:
-   - If no `--pst_file` argument is provided, the PST file is saved as `emails.pst` in the current working directory. You can specify a custom directory for the PST file using the `--pst_file` argument.
-
-### 4. **Logging**:
-   - All errors and key operations are logged to `import_log.txt`. You can review this log for information about any errors that occurred during the process.
-
-## Troubleshooting
-
-### 1. **Outlook Errors**:
-   If you encounter errors related to Outlook, ensure that Outlook is installed, configured correctly, and not being used by other processes during the script's execution.
-
-### 2. **Permission Issues**:
-   Ensure that you have permission to write to the output directory and PST file location. If the directory for the PST file doesn't exist, the script will create it automatically.
-
-### 3. **Large MBOX Files**:
-   The script is designed to handle large MBOX files using batch processing to prevent memory overload. However, if you encounter memory issues, try reducing the batch size.
-
-### 4. **Missing Attachments**:
-   If attachments are not appearing in the final PST file, ensure that the email parts are correctly formatted in the MBOX file. The script expects standard MIME-formatted attachments.
+If interrupted (e.g., by pressing Ctrl+C), the script will save the progress and allow resuming from where it left off.
 
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for more details.
-
----
-
-## Example Usage
-
-```bash
-# Basic usage with a default PST file name
-python convert.py file.mbox D:\output
-
-# Usage with a specified PST file path
-python convert.py file.mbox D:\output --pst_file D:\myPSTs\converted_emails.pst
-```
-
----
-
-### Additional Notes
-
-1. **Test Small MBOX Files First**: If you're running the script for the first time, it's recommended to test it with a smaller MBOX file before processing large files.
-
-2. **Backup Important Data**: Always back up important data before running large-scale conversions.
-
-3. **PST File Limits**: PST files have size limits based on the version of Outlook you're using. Ensure that the size of your final PST file doesn't exceed these limits (e.g., 20 GB for Outlook 2003, 50 GB for Outlook 2010 and later).
-
----
+This project is licensed under the MIT License.
