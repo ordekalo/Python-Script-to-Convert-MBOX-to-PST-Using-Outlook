@@ -5,11 +5,17 @@ import email
 import win32com.client
 from tqdm import tqdm
 import logging
+import concurrent.futures
+import gc
+import time
 import argparse
+import hashlib
 
 # Initialize logging
 logging.basicConfig(filename='import_log.txt', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
+
+processed_emails = set()
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Convert MBOX to PST using Outlook")
@@ -29,19 +35,49 @@ def extract_emails_from_mbox(mbox_file):
         logging.error(f"Error extracting emails: {e}")
         raise
 
-def save_attachment(part, mail_item, output_folder):
+def save_attachment_directly(part, mail_item):
+    """
+    Saves the attachment directly to the Outlook mail item without writing to disk.
+    """
     filename = part.get_filename()
     if filename:
         payload = part.get_payload(decode=True)
         if payload:
-            attachment_path = os.path.join(output_folder, filename)
-            with open(attachment_path, 'wb') as f:
-                f.write(payload)
-            mail_item.Attachments.Add(attachment_path)
-            os.remove(attachment_path)  # Clean up
+            # Save the attachment directly to the Outlook email
+            mail_item.Attachments.AddBytes(filename, payload)
+
+def hash_email(raw_email):
+    """
+    Create a unique hash of the email content to track processed emails.
+    """
+    return hashlib.sha256(raw_email.encode('utf-8')).hexdigest()
+
+def process_email_with_retry(raw_email, inbox_folder, output_folder, retries=3):
+    """
+    Attempts to process an email and import it into Outlook.
+    Retries up to 'retries' times if an error occurs.
+    """
+    attempt = 0
+    email_id = hash_email(raw_email)
+    if email_id in processed_emails:
+        logging.info(f"Skipping already processed email: {email_id}")
+        return
+    
+    while attempt < retries:
+        try:
+            process_email(raw_email, inbox_folder, output_folder)
+            processed_emails.add(email_id)  # Mark email as processed
+            return  # If successful, break out of the retry loop
+        except Exception as e:
+            attempt += 1
+            logging.error(f"Error processing email on attempt {attempt}: {e}")
+            time.sleep(1)  # Wait for 1 second before retrying
+            if attempt >= retries:
+                logging.error(f"Failed to process email after {retries} attempts: {e}")
 
 def process_email(raw_email, inbox_folder, output_folder):
     try:
+        logging.info(f"Processing email: {raw_email[:50]}...")
         msg = email.message_from_string(raw_email, policy=email.policy.default)
         mail_item = win32com.client.Dispatch("Outlook.Application").CreateItem(0)
         mail_item.Subject = msg['subject'] or "(No Subject)"
@@ -54,7 +90,8 @@ def process_email(raw_email, inbox_folder, output_folder):
         if msg.is_multipart():
             for part in msg.walk():
                 if part.get_filename():
-                    save_attachment(part, mail_item, output_folder)
+                    logging.info(f"Saving attachment: {part.get_filename()}")
+                    save_attachment_directly(part, mail_item)
                 elif part.get_content_type() == 'text/plain':
                     mail_item.Body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
                 elif part.get_content_type() == 'text/html':
@@ -64,8 +101,22 @@ def process_email(raw_email, inbox_folder, output_folder):
 
         mail_item.Save()
         mail_item.Move(inbox_folder)
+        logging.info(f"Email processed successfully.")
     except Exception as e:
         logging.error(f"Error processing email: {e}")
+
+def batch_process_emails(emails, inbox_folder, output_folder, batch_size=500):
+    """
+    Processes emails in batches to avoid memory overload and improve performance.
+    """
+    for i in range(0, len(emails), batch_size):
+        batch = emails[i:i + batch_size]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(process_email_with_retry, email, inbox_folder, output_folder) for email in batch]
+            concurrent.futures.wait(futures)
+        
+        logging.info(f"Processed batch {i // batch_size + 1}/{len(emails) // batch_size + 1}")
+        gc.collect()  # Clean up memory
 
 def import_emails_to_outlook(emails, pst_file, output_folder):
     try:
@@ -83,11 +134,19 @@ def import_emails_to_outlook(emails, pst_file, output_folder):
 
         inbox_folder = pst_folder.Folders.Add("Inbox") if not get_folder_by_name(pst_folder, "Inbox") else pst_folder.Folders["Inbox"]
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            executor.map(lambda email: process_email(email, inbox_folder, output_folder), emails)
+        batch_process_emails(emails, inbox_folder, output_folder)
     except Exception as e:
         logging.error(f"Error creating or importing PST file: {e}")
         raise
+
+def get_folder_by_name(parent_folder, folder_name):
+    """
+    Get a folder by name from the parent folder, or return None if not found.
+    """
+    for folder in parent_folder.Folders:
+        if folder.Name == folder_name:
+            return folder
+    return None
 
 if __name__ == "__main__":
     args = parse_args()
