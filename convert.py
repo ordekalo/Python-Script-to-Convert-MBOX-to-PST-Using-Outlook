@@ -3,6 +3,7 @@ import mailbox
 import os
 import email
 import win32com.client
+import pythoncom
 from tqdm import tqdm
 import logging
 import concurrent.futures
@@ -10,6 +11,8 @@ import gc
 import time
 import hashlib
 import argparse
+import traceback
+from retrying import retry
 
 # Initialize logging
 logging.basicConfig(filename='import_log.txt', level=logging.INFO, 
@@ -22,10 +25,17 @@ def parse_args():
     Parse command-line arguments.
     """
     parser = argparse.ArgumentParser(description="Convert MBOX to PST using Outlook")
-    parser.add_argument("mbox_file", help="Path to the MBOX file")
+    parser.add_argument("--mbox_file", help="Path to the MBOX file. If not provided, the script will auto-detect all '.mbox' files in the current directory.")
     parser.add_argument("output_folder", help="Folder to save the attachments")
     parser.add_argument("--pst_file", help="Path to the PST file", default="emails.pst")
     return parser.parse_args()
+
+def find_mbox_files():
+    """
+    Find all .mbox files in the current directory.
+    """
+    mbox_files = [f for f in os.listdir('.') if f.endswith('.mbox')]
+    return mbox_files
 
 def hash_email(raw_email):
     """
@@ -60,6 +70,27 @@ def save_attachment(part, mail_item):
                 f.write(payload)
             mail_item.Attachments.Add(os.path.abspath(filename))
             os.remove(filename)  # Clean up after attaching
+
+@retry(wait_exponential_multiplier=1000, wait_exponential_max=10000, stop_max_attempt_number=5)
+def ensure_outlook_running():
+    """
+    Ensure that Outlook is running and accessible.
+    Retry if Outlook is not available with exponential backoff.
+    """
+    try:
+        pythoncom.CoInitialize()  # Initialize COM library
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        return outlook
+    except Exception as e:
+        logging.error(f"Failed to connect to Outlook: {e}")
+        raise
+
+def release_com_object(obj):
+    """
+    Properly release a COM object to avoid memory leaks.
+    """
+    if obj:
+        obj = None
 
 def process_email_with_retry(raw_email, inbox_folder, output_folder, retries=3):
     """
@@ -114,6 +145,7 @@ def process_email(raw_email, inbox_folder, output_folder):
         logging.info(f"Email processed successfully.")
     except Exception as e:
         logging.error(f"Error processing email: {e}")
+        logging.error(traceback.format_exc())  # Log stack trace for debugging
 
 def batch_process_emails(emails, inbox_folder, output_folder, batch_size=500):
     """
@@ -141,12 +173,15 @@ def ensure_directory_exists(pst_file):
             logging.error(f"Error creating directory {pst_dir}: {e}")
             raise
 
+@retry(wait_exponential_multiplier=1000, wait_exponential_max=10000, stop_max_attempt_number=5)
 def import_emails_to_outlook(emails, pst_file, output_folder):
     try:
+        # Ensure Outlook is running
+        outlook = ensure_outlook_running()
+
         # Ensure the directory for the PST file exists
         ensure_directory_exists(pst_file)
         
-        outlook = win32com.client.Dispatch("Outlook.Application")
         namespace = outlook.GetNamespace("MAPI")
         
         print(f"Creating PST file: {pst_file}")
@@ -157,8 +192,10 @@ def import_emails_to_outlook(emails, pst_file, output_folder):
         inbox_folder = pst_folder.Folders.Add("Inbox") if not get_folder_by_name(pst_folder, "Inbox") else pst_folder.Folders["Inbox"]
 
         batch_process_emails(emails, inbox_folder, output_folder)
+
     except Exception as e:
         logging.error(f"Error creating or importing PST file: {e}")
+        logging.error(traceback.format_exc())  # Log stack trace for debugging
         raise
 
 def get_folder_by_name(parent_folder, folder_name):
@@ -172,6 +209,16 @@ def get_folder_by_name(parent_folder, folder_name):
 
 if __name__ == "__main__":
     args = parse_args()
+
+    # If no MBOX file is provided, auto-detect .mbox files in the current directory
+    if not args.mbox_file:
+        mbox_files = find_mbox_files()
+        if not mbox_files:
+            print("No .mbox files found in the current directory.")
+            sys.exit(1)
+        else:
+            print(f"Found .mbox files: {mbox_files}")
+            args.mbox_file = mbox_files[0]  # Process the first .mbox file found
 
     # Check if the MBOX file exists
     if not os.path.exists(args.mbox_file):
