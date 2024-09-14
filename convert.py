@@ -53,12 +53,18 @@ def import_emails_to_outlook(emails, pst_file):
     for raw_email in tqdm(emails, desc="Importing emails", unit="email"):
         msg = email.message_from_string(raw_email)
 
-        # Create a new mail item in Outlook
+        # Create a new mail item in Outlook as a received message
         mail_item = outlook.CreateItem(0)  # 0 = olMailItem
         mail_item.Subject = msg['subject'] or "(No Subject)"
-        mail_item.BodyFormat = 1  # 1 = plain text format
 
-        # Handle the email body (text/plain or text/html)
+        # Set "To", "From", "CC", and "BCC" fields
+        mail_item.To = msg.get('to', '')
+        mail_item.CC = msg.get('cc', '')
+        mail_item.BCC = msg.get('bcc', '')
+        mail_item.SentOn = msg.get('date')  # Set the original sent date
+        mail_item.SenderEmailAddress = msg.get('from', '')  # Sender's email address
+
+        # Set the email body format
         if msg.is_multipart():
             for part in msg.walk():
                 content_type = part.get_content_type()
@@ -74,6 +80,10 @@ def import_emails_to_outlook(emails, pst_file):
                 mail_item.Body = payload.decode('utf-8', errors='ignore')
             elif content_type == 'text/html' and payload:
                 mail_item.HTMLBody = payload.decode('utf-8', errors='ignore')
+
+        # Set the "ReceivedTime" field to the date the email was received
+        if 'date' in msg:
+            mail_item.ReceivedTime = msg['date']
 
         # Save the mail item in the "Inbox" folder
         mail_item.Save()
