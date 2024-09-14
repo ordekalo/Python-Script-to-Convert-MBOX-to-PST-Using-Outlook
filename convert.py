@@ -8,7 +8,6 @@ import logging
 import concurrent.futures
 import gc
 import time
-import argparse
 import hashlib
 
 # Initialize logging
@@ -17,14 +16,16 @@ logging.basicConfig(filename='import_log.txt', level=logging.INFO,
 
 processed_emails = set()
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Convert MBOX to PST using Outlook")
-    parser.add_argument("mbox_file", help="Path to the MBOX file")
-    parser.add_argument("output_folder", help="Folder to save the attachments")
-    parser.add_argument("--pst_file", help="Path to the PST file", default="emails.pst")
-    return parser.parse_args()
+def hash_email(raw_email):
+    """
+    Create a unique hash of the email content to track processed emails.
+    """
+    return hashlib.sha256(raw_email.encode('utf-8')).hexdigest()
 
 def extract_emails_from_mbox(mbox_file):
+    """
+    Extract emails from an MBOX file and return them as a list of raw email strings.
+    """
     try:
         print(f"Opening MBOX file: {mbox_file}")
         mbox = mailbox.mbox(mbox_file)
@@ -32,25 +33,22 @@ def extract_emails_from_mbox(mbox_file):
         print(f"Extracted {len(emails)} emails from the MBOX file.")
         return emails
     except Exception as e:
-        logging.error(f"Error extracting emails: {e}")
+        logging.error(f"Error extracting emails from MBOX: {e}")
         raise
 
-def save_attachment_directly(part, mail_item):
+def save_attachment(part, mail_item):
     """
-    Saves the attachment directly to the Outlook mail item without writing to disk.
+    Save the attachment from the email part to the Outlook mail item.
     """
     filename = part.get_filename()
     if filename:
         payload = part.get_payload(decode=True)
         if payload:
-            # Save the attachment directly to the Outlook email
-            mail_item.Attachments.AddBytes(filename, payload)
-
-def hash_email(raw_email):
-    """
-    Create a unique hash of the email content to track processed emails.
-    """
-    return hashlib.sha256(raw_email.encode('utf-8')).hexdigest()
+            # Save attachment to the mail item
+            with open(filename, 'wb') as f:
+                f.write(payload)
+            mail_item.Attachments.Add(os.path.abspath(filename))
+            os.remove(filename)  # Clean up after attaching
 
 def process_email_with_retry(raw_email, inbox_folder, output_folder, retries=3):
     """
@@ -78,7 +76,7 @@ def process_email_with_retry(raw_email, inbox_folder, output_folder, retries=3):
 def process_email(raw_email, inbox_folder, output_folder):
     try:
         logging.info(f"Processing email: {raw_email[:50]}...")
-        msg = email.message_from_string(raw_email, policy=email.policy.default)
+        msg = email.message_from_string(raw_email)
         mail_item = win32com.client.Dispatch("Outlook.Application").CreateItem(0)
         mail_item.Subject = msg['subject'] or "(No Subject)"
         mail_item.To = msg.get('to', '')
@@ -89,12 +87,13 @@ def process_email(raw_email, inbox_folder, output_folder):
 
         if msg.is_multipart():
             for part in msg.walk():
+                content_type = part.get_content_type()
                 if part.get_filename():
                     logging.info(f"Saving attachment: {part.get_filename()}")
-                    save_attachment_directly(part, mail_item)
-                elif part.get_content_type() == 'text/plain':
+                    save_attachment(part, mail_item)
+                elif content_type == 'text/plain':
                     mail_item.Body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                elif part.get_content_type() == 'text/html':
+                elif content_type == 'text/html':
                     mail_item.HTMLBody = part.get_payload(decode=True).decode('utf-8', errors='ignore')
         else:
             mail_item.Body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
@@ -161,6 +160,16 @@ def get_folder_by_name(parent_folder, folder_name):
     return None
 
 if __name__ == "__main__":
-    args = parse_args()
-    emails = extract_emails_from_mbox(args.mbox_file)
-    import_emails_to_outlook(emails, args.pst_file, args.output_folder)
+    if len(sys.argv) != 2:
+        print("Usage: python convert.py <mbox_file>")
+        sys.exit(1)
+
+    mbox_file = sys.argv[1]
+    if not os.path.exists(mbox_file):
+        print(f"Error: File '{mbox_file}' does not exist.")
+        sys.exit(1)
+
+    pst_file = os.path.join(os.path.dirname(mbox_file), 'emails.pst')
+    emails = extract_emails_from_mbox(mbox_file)
+    import_emails_to_outlook(emails, pst_file, os.path.dirname(mbox_file))
+    print(f"Conversion completed. PST saved at {pst_file}")
