@@ -1,32 +1,26 @@
-# MBOX to PST Converter Using Outlook COM Interface
+# MBOX to PST Converter Using Outlook
 
-This Python script allows you to convert MBOX files to PST format by using the Microsoft Outlook COM interface. It reads an MBOX file, extracts the emails, and imports them into a new PST file, with a progress bar showing the conversion progress.
+This Python script converts MBOX files into PST format using Microsoft Outlook's COM interface. It is designed to handle large MBOX files efficiently with batch processing, retries, and attachment support.
 
 ## Features
 
-- Converts emails from an MBOX file into a PST file.
-- Utilizes the Microsoft Outlook COM interface to perform the conversion.
-- Automatically creates an "Inbox" folder in the PST file if it doesn't exist.
-- Handles both plain text and HTML email bodies.
-- Displays a progress bar during conversion using `tqdm`.
+- Converts MBOX emails to PST using the Microsoft Outlook COM interface.
+- Supports attachments without needing to save them on disk.
+- Handles email retries for robust error handling.
+- Batch processing to avoid memory overload and improve performance.
+- Resumable functionality: skips already processed emails using email hashing.
+- Logs detailed information and errors to help with debugging.
 
-## Requirements
+## Prerequisites
 
-- **Windows Operating System**: This script works only on Windows, as it uses the COM interface for Microsoft Outlook.
-- **Microsoft Outlook**: You must have Outlook installed and configured on your machine.
-- **Python 3.x**
-- **pywin32** package: This is required for interacting with Outlook.
-- **tqdm** package: This package is used to display the progress bar.
+- **Windows OS**: The script uses the Outlook COM interface, which requires Windows.
+- **Microsoft Outlook**: You must have Outlook installed and configured.
+- **Python 3.x**: Make sure you have Python 3.x installed.
 
 ## Installation
 
-### 1. Install Python
+1. Clone the repository or download the script.
+2. Install the required dependencies using the `requirements.txt` file:
 
-Make sure you have Python 3.x installed on your system. If not, you can download it from [Python's official website](https://www.python.org/downloads/).
-
-### 2. Install the required packages
-
-To interact with Outlook and display the progress bar, you'll need the following packages:
-
-```bash
-pip install -r requirements.txt
+   ```bash
+   pip install -r requirements.txt
