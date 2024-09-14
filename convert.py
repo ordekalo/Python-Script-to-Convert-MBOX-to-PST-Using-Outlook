@@ -118,14 +118,26 @@ def batch_process_emails(emails, inbox_folder, output_folder, batch_size=500):
         logging.info(f"Processed batch {i // batch_size + 1}/{len(emails) // batch_size + 1}")
         gc.collect()  # Clean up memory
 
+def ensure_directory_exists(pst_file):
+    """
+    Ensure the directory for the PST file exists. If not, create it.
+    """
+    pst_dir = os.path.dirname(pst_file)
+    if pst_dir and not os.path.exists(pst_dir):  # Check if directory is specified and doesn't exist
+        try:
+            os.makedirs(pst_dir)  # Create the directory
+            print(f"Created directory for PST: {pst_dir}")
+        except OSError as e:
+            logging.error(f"Error creating directory {pst_dir}: {e}")
+            raise
+
 def import_emails_to_outlook(emails, pst_file, output_folder):
     try:
+        # Ensure the directory for the PST file exists
+        ensure_directory_exists(pst_file)
+        
         outlook = win32com.client.Dispatch("Outlook.Application")
         namespace = outlook.GetNamespace("MAPI")
-
-        # Ensure the directory for the PST file exists
-        if not os.path.exists(os.path.dirname(pst_file)):
-            os.makedirs(os.path.dirname(pst_file))
         
         print(f"Creating PST file: {pst_file}")
         logging.info(f"Creating PST file: {pst_file}")
