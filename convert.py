@@ -9,12 +9,23 @@ import concurrent.futures
 import gc
 import time
 import hashlib
+import argparse
 
 # Initialize logging
 logging.basicConfig(filename='import_log.txt', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 processed_emails = set()
+
+def parse_args():
+    """
+    Parse command-line arguments.
+    """
+    parser = argparse.ArgumentParser(description="Convert MBOX to PST using Outlook")
+    parser.add_argument("mbox_file", help="Path to the MBOX file")
+    parser.add_argument("output_folder", help="Folder to save the attachments")
+    parser.add_argument("--pst_file", help="Path to the PST file", default="emails.pst")
+    return parser.parse_args()
 
 def hash_email(raw_email):
     """
@@ -160,16 +171,20 @@ def get_folder_by_name(parent_folder, folder_name):
     return None
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python convert.py <mbox_file>")
+    args = parse_args()
+
+    # Check if the MBOX file exists
+    if not os.path.exists(args.mbox_file):
+        print(f"Error: File '{args.mbox_file}' does not exist.")
         sys.exit(1)
 
-    mbox_file = sys.argv[1]
-    if not os.path.exists(mbox_file):
-        print(f"Error: File '{mbox_file}' does not exist.")
-        sys.exit(1)
+    # Determine the directory of the MBOX file to create a PST file
+    pst_file = os.path.abspath(args.pst_file)
+    
+    # Extract emails from the MBOX file
+    emails = extract_emails_from_mbox(args.mbox_file)
 
-    pst_file = os.path.join(os.path.dirname(mbox_file), 'emails.pst')
-    emails = extract_emails_from_mbox(mbox_file)
-    import_emails_to_outlook(emails, pst_file, os.path.dirname(mbox_file))
+    # Import the emails into a new PST file in Outlook
+    import_emails_to_outlook(emails, pst_file, args.output_folder)
+
     print(f"Conversion completed. PST saved at {pst_file}")
