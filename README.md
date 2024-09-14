@@ -26,7 +26,7 @@ This Python script converts MBOX files into PST format using the Microsoft Outlo
 Clone the repository using Git or download it as a ZIP and extract it to your local machine:
 
 ```bash
-git clone https://github.com/yourusername/mbox_to_pst_converter.git
+git clone [https://github.com/yourusername/mbox_to_pst_converter.git](https://github.com/ordekalo/Python-Script-to-Convert-MBOX-to-PST-Using-Outlook.git)
 ```
 
 ### 2. Install Python Dependencies
