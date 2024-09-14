@@ -4,7 +4,7 @@ import os
 import email
 import win32com.client
 import pythoncom
-from tqdm import tqdm
+from tqdm import tqdm  # Progress bar
 import logging
 import concurrent.futures
 import gc
@@ -13,11 +13,23 @@ import hashlib
 import argparse
 import traceback
 from retrying import retry
+import signal
+import shutil
+import json
 
 # Initialize logging
 logging.basicConfig(filename='import_log.txt', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Handle signal interrupts (Ctrl+C or termination)
+def signal_handler(sig, frame):
+    print("\nGracefully shutting down...")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+# Processed emails loaded from checkpoint
 processed_emails = set()
 
 def parse_args():
@@ -28,13 +40,27 @@ def parse_args():
     parser.add_argument("--mbox_file", help="Path to the MBOX file. If not provided, the script will auto-detect all '.mbox' files in the current directory.")
     parser.add_argument("output_folder", help="Folder to save the attachments")
     parser.add_argument("--pst_file", help="Path to the PST file", default="emails.pst")
+    parser.add_argument("--log-level", help="Set the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)", default="INFO")
     return parser.parse_args()
+
+def load_checkpoint():
+    """Load the set of processed emails from a checkpoint file."""
+    if os.path.exists('processed_emails.json'):
+        with open('processed_emails.json', 'r') as f:
+            return set(json.load(f))
+    return set()
+
+def save_checkpoint():
+    """Save the set of processed emails to a checkpoint file."""
+    with open('processed_emails.json', 'w') as f:
+        json.dump(list(processed_emails), f)
 
 def find_mbox_files():
     """
     Find all .mbox files in the current directory.
     """
-    mbox_files = [f for f in os.listdir('.') if f.endswith('.mbox')]
+    print("Searching for .mbox files in the current directory...")
+    mbox_files = [f for f in tqdm(os.listdir('.'), desc="Looking for MBOX files") if f.endswith('.mbox')]
     return mbox_files
 
 def hash_email(raw_email):
@@ -43,16 +69,14 @@ def hash_email(raw_email):
     """
     return hashlib.sha256(raw_email.encode('utf-8')).hexdigest()
 
-def extract_emails_from_mbox(mbox_file):
-    """
-    Extract emails from an MBOX file and return them as a list of raw email strings.
-    """
+def extract_emails_from_mbox_stream(mbox_file):
+    """Stream emails from MBOX file instead of loading all at once."""
     try:
         print(f"Opening MBOX file: {mbox_file}")
         mbox = mailbox.mbox(mbox_file)
-        emails = [message.as_string() for message in mbox]
-        print(f"Extracted {len(emails)} emails from the MBOX file.")
-        return emails
+        print("Streaming emails from MBOX file...")
+        for message in tqdm(mbox, desc="Streaming emails"):
+            yield message.as_string()
     except Exception as e:
         logging.error(f"Error extracting emails from MBOX: {e}")
         raise
@@ -151,12 +175,14 @@ def batch_process_emails(emails, inbox_folder, output_folder, batch_size=500):
     """
     Processes emails in batches to avoid memory overload and improve performance.
     """
-    for i in range(0, len(emails), batch_size):
+    print("Processing emails in batches...")
+    for i in tqdm(range(0, len(emails), batch_size), desc="Processing batches"):
         batch = emails[i:i + batch_size]
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
             futures = [executor.submit(process_email_with_retry, email, inbox_folder, output_folder) for email in batch]
             concurrent.futures.wait(futures)
         
+        save_checkpoint()  # Save progress after each batch
         logging.info(f"Processed batch {i // batch_size + 1}/{len(emails) // batch_size + 1}")
         gc.collect()  # Clean up memory
 
@@ -173,6 +199,13 @@ def ensure_directory_exists(pst_file):
             logging.error(f"Error creating directory {pst_dir}: {e}")
             raise
 
+def backup_existing_pst(pst_file):
+    """Backup existing PST file to prevent overwriting."""
+    if os.path.exists(pst_file):
+        backup_file = pst_file + ".backup"
+        shutil.copy(pst_file, backup_file)
+        print(f"Backed up existing PST file to: {backup_file}")
+
 @retry(wait_exponential_multiplier=1000, wait_exponential_max=10000, stop_max_attempt_number=5)
 def import_emails_to_outlook(emails, pst_file, output_folder):
     try:
@@ -181,6 +214,9 @@ def import_emails_to_outlook(emails, pst_file, output_folder):
 
         # Ensure the directory for the PST file exists
         ensure_directory_exists(pst_file)
+
+        # Backup existing PST file if it already exists
+        backup_existing_pst(pst_file)
         
         namespace = outlook.GetNamespace("MAPI")
         
@@ -210,6 +246,10 @@ def get_folder_by_name(parent_folder, folder_name):
 if __name__ == "__main__":
     args = parse_args()
 
+    # Set log level based on user input
+    log_level = getattr(logging, args.log_level.upper(), logging.INFO)
+    logging.getLogger().setLevel(log_level)
+
     # If no MBOX file is provided, auto-detect .mbox files in the current directory
     if not args.mbox_file:
         mbox_files = find_mbox_files()
@@ -225,11 +265,14 @@ if __name__ == "__main__":
         print(f"Error: File '{args.mbox_file}' does not exist.")
         sys.exit(1)
 
+    # Load processed emails from checkpoint
+    processed_emails = load_checkpoint()
+
     # Determine the directory of the MBOX file to create a PST file
     pst_file = os.path.abspath(args.pst_file)
     
-    # Extract emails from the MBOX file
-    emails = extract_emails_from_mbox(args.mbox_file)
+    # Extract emails from the MBOX file using streaming
+    emails = list(extract_emails_from_mbox_stream(args.mbox_file))
 
     # Import the emails into a new PST file in Outlook
     import_emails_to_outlook(emails, pst_file, args.output_folder)
