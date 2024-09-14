@@ -5,7 +5,6 @@ import email
 import win32com.client
 from tqdm import tqdm
 import logging
-import concurrent.futures
 import argparse
 
 # Initialize logging
@@ -69,14 +68,26 @@ def process_email(raw_email, inbox_folder, output_folder):
         logging.error(f"Error processing email: {e}")
 
 def import_emails_to_outlook(emails, pst_file, output_folder):
-    outlook = win32com.client.Dispatch("Outlook.Application")
-    namespace = outlook.GetNamespace("MAPI")
-    namespace.AddStoreEx(pst_file, 3)
-    pst_folder = namespace.Folders.GetLast()
-    inbox_folder = pst_folder.Folders.Add("Inbox") if not get_folder_by_name(pst_folder, "Inbox") else pst_folder.Folders["Inbox"]
+    try:
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        namespace = outlook.GetNamespace("MAPI")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        executor.map(lambda email: process_email(email, inbox_folder, output_folder), emails)
+        # Ensure the directory for the PST file exists
+        if not os.path.exists(os.path.dirname(pst_file)):
+            os.makedirs(os.path.dirname(pst_file))
+        
+        print(f"Creating PST file: {pst_file}")
+        logging.info(f"Creating PST file: {pst_file}")
+        namespace.AddStoreEx(pst_file, 3)  # Create new PST file
+        pst_folder = namespace.Folders.GetLast()
+
+        inbox_folder = pst_folder.Folders.Add("Inbox") if not get_folder_by_name(pst_folder, "Inbox") else pst_folder.Folders["Inbox"]
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            executor.map(lambda email: process_email(email, inbox_folder, output_folder), emails)
+    except Exception as e:
+        logging.error(f"Error creating or importing PST file: {e}")
+        raise
 
 if __name__ == "__main__":
     args = parse_args()
