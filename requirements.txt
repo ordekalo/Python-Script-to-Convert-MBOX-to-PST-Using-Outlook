@@ -1,2 +1,3 @@
-pywin32
 tqdm
+pywin32
+timeout-decorator
