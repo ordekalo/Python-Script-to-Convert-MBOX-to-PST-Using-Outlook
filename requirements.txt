@@ -1,3 +1,4 @@
 tqdm
 pywin32
 timeout-decorator
+retrying
