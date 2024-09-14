@@ -27,6 +27,20 @@ def get_folder_by_name(parent_folder, folder_name):
             return folder
     return None
 
+def save_attachment(part, mail_item):
+    """
+    Save the attachment from the email part to the Outlook mail item.
+    """
+    filename = part.get_filename()
+    if filename:  # If the part has a filename, it is likely an attachment
+        payload = part.get_payload(decode=True)
+        if payload:
+            # Save attachment to the mail item
+            attachment_path = os.path.join(os.getcwd(), filename)
+            with open(attachment_path, 'wb') as f:
+                f.write(payload)
+            mail_item.Attachments.Add(attachment_path)
+
 def import_emails_to_outlook(emails, pst_file):
     """
     Import a list of emails into a new PST file in Outlook.
@@ -64,15 +78,16 @@ def import_emails_to_outlook(emails, pst_file):
         mail_item.SentOn = msg.get('date')  # Set the original sent date
         mail_item.SenderEmailAddress = msg.get('from', '')  # Sender's email address
 
-        # Set the email body format
+        # Set the email body format and handle attachments
         if msg.is_multipart():
             for part in msg.walk():
                 content_type = part.get_content_type()
-                payload = part.get_payload(decode=True)
-                if content_type == 'text/plain' and payload:
-                    mail_item.Body = payload.decode('utf-8', errors='ignore')
-                elif content_type == 'text/html' and payload:
-                    mail_item.HTMLBody = payload.decode('utf-8', errors='ignore')
+                if part.get_filename():  # This is likely an attachment
+                    save_attachment(part, mail_item)
+                elif content_type == 'text/plain':
+                    mail_item.Body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                elif content_type == 'text/html':
+                    mail_item.HTMLBody = part.get_payload(decode=True).decode('utf-8', errors='ignore')
         else:
             content_type = msg.get_content_type()
             payload = msg.get_payload(decode=True)
