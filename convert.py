@@ -17,7 +17,6 @@ import signal
 import shutil
 import json
 from io import BytesIO
-import multiprocessing
 
 # Signal Handling for Graceful Exit
 def signal_handler(sig, frame):
@@ -37,7 +36,7 @@ def setup_logging_and_parse_args():
     parser.add_argument("--pst_file", help="Path to the PST file", default="emails.pst")
     parser.add_argument("--log-level", help="Set the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)", default="INFO")
     parser.add_argument("--batch-size", help="Set the batch size for processing emails", type=int, default=500)
-    parser.add_argument("--workers", help="Number of parallel workers", type=int, default=multiprocessing.cpu_count())
+    parser.add_argument("--workers", help="Number of parallel workers", type=int, default=4)
     return parser.parse_args()
 
 # Initialize logging and processed email checkpoint
@@ -91,15 +90,20 @@ def save_attachment_in_memory(part, mail_item):
             attachment_stream = BytesIO(payload)
             mail_item.Attachments.Add(attachment_stream, filename)
 
+# Enhanced function to ensure Outlook is running, with retries
 @retry(wait_exponential_multiplier=1000, wait_exponential_max=10000, stop_max_attempt_number=5)
 def ensure_outlook_running():
     """Ensure that Outlook is running and accessible."""
+    pythoncom.CoInitialize()  # Initialize COM library
     try:
-        pythoncom.CoInitialize()  # Initialize COM library
+        # Attempt to connect to Outlook
         outlook = win32com.client.Dispatch("Outlook.Application")
         return outlook
     except Exception as e:
         logging.error(f"Failed to connect to Outlook: {e}")
+        print(f"Error: {e}")
+        print("Retrying to connect to Outlook in 5 seconds...")
+        time.sleep(5)  # Delay between retry attempts
         raise
 
 def release_com_object(obj):
@@ -123,7 +127,7 @@ def process_email_with_retry(raw_email, inbox_folder, output_folder, retries=3):
         except Exception as e:
             attempt += 1
             logging.error(f"Error processing email on attempt {attempt}: {e}")
-            time.sleep(1)  # Wait for 1 second before retrying
+            time.sleep(1)  # Wait 1 second before retrying
             if attempt >= retries:
                 logging.error(f"Failed to process email after {retries} attempts: {e}")
 
